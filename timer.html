@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rubik's Cube Timer</title>
+  <script type="module">
+    import "https://cdn.cubing.net/js/cubing/twisty";
+  </script>
+  <style>
+    :root {
+      --bg: #f9f9f9;
+      --fg: #222;
+      --accent: #4CAF50;
+    }
+
+    body.dark {
+      --bg: #1e1e1e;
+      --fg: #e0e0e0;
+      --accent: #66bb6a;
+    }
+
+    body {
+      margin: 0;
+      padding: 2rem;
+      font-family: sans-serif;
+      background-color: var(--bg);
+      color: var(--fg);
+      text-align: center;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    #timer {
+      font-size: 80px;
+      margin: 1rem 0;
+      transition: color 0.2s;
+    }
+
+    #scramble {
+      font-size: 22px;
+      margin-bottom: 1rem;
+      font-weight: bold;
+    }
+
+    twisty-player {
+      width: 300px;
+      height: 300px;
+      margin: 1rem auto;
+    }
+
+    #stats {
+      font-size: 18px;
+      margin: 1rem 0;
+    }
+
+    #themeToggle {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid var(--fg);
+      color: var(--fg);
+      border-radius: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    #themeToggle:focus {
+      outline: none;
+    }
+
+    #newScrambleBtn {
+      padding: 10px 20px;
+      font-size: 16px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 1rem;
+    }
+
+    #newScrambleBtn:hover {
+      opacity: 0.9;
+    }
+
+    .ready {
+      color: orange;
+    }
+
+    .running {
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <button id="themeToggle" onclick="toggleTheme()" tabindex="-1">🌙 Theme</button>
+
+  <h1>Rubik's Cube Timer</h1>
+  <div id="timer">0.00</div>
+  <div id="scramble">Loading...</div>
+
+  <twisty-player
+    id="cube"
+    puzzle="3x3x3"
+    control-panel="none"
+    background="none"
+    hint-facelets="none"
+    experimental-stickering
+    alg="R U R' U'"
+  ></twisty-player>
+
+  <button onclick="generateScramble()" id="newScrambleBtn">🔄 New Scramble</button>
+
+  <div id="stats">
+    <p>Last: <span id="last">-</span> s</p>
+    <p>Best: <span id="best">-</span> s</p>
+    <p>Ao5: <span id="ao5">-</span></p>
+    <p>Ao12: <span id="ao12">-</span></p>
+  </div>
+
+  <script>
+    const timerEl = document.getElementById("timer");
+    const scrambleEl = document.getElementById("scramble");
+    const cube = document.getElementById("cube");
+    const lastEl = document.getElementById("last");
+    const bestEl = document.getElementById("best");
+    const ao5El = document.getElementById("ao5");
+    const ao12El = document.getElementById("ao12");
+
+    let times = [];
+    let running = false;
+    let holding = false;
+    let holdStart = null;
+    let readyToStart = false;
+    let startTime = null;
+    let interval = null;
+
+    const HOLD_THRESHOLD = 300; // ms
+
+    function format(ms) {
+      return (ms / 1000).toFixed(2);
+    }
+
+    function updateTimer() {
+      timerEl.textContent = format(Date.now() - startTime);
+    }
+
+    function startTimer() {
+      timerEl.classList.remove("ready");
+      timerEl.classList.add("running");
+      startTime = Date.now();
+      interval = setInterval(updateTimer, 10);
+      running = true;
+    }
+
+    function stopTimer() {
+      clearInterval(interval);
+      running = false;
+      timerEl.classList.remove("running");
+      const time = Date.now() - startTime;
+      timerEl.textContent = format(time);
+      times.push(time);
+      updateStats(time);
+      generateScramble();
+    }
+
+    function updateStats(time) {
+      lastEl.textContent = format(time);
+      bestEl.textContent = format(Math.min(...times));
+
+      const ao = (n) => {
+        if (times.length < n) return "-";
+        const recent = times.slice(-n).sort((a, b) => a - b);
+        const trimmed = recent.slice(1, -1);
+        const avg = trimmed.reduce((sum, t) => sum + t, 0) / trimmed.length;
+        return format(avg);
+      };
+
+      ao5El.textContent = ao(5);
+      ao12El.textContent = ao(12);
+    }
+
+    function generateScramble() {
+      const moves = ["R", "L", "U", "D", "F", "B"];
+      const mods = ["", "'", "2"];
+      let scramble = "", prev = "", prev2 = "";
+
+      for (let i = 0; i < 20; i++) {
+        let move;
+        do {
+          move = moves[Math.floor(Math.random() * moves.length)];
+        } while (move === prev || (move === prev2 && move === prev));
+        prev2 = prev;
+        prev = move;
+        scramble += move + mods[Math.floor(Math.random() * mods.length)] + " ";
+      }
+
+      scramble = scramble.trim();
+      scrambleEl.textContent = scramble;
+      cube.setAttribute("alg", scramble);
+    }
+
+    function toggleTheme() {
+      document.body.classList.toggle("dark");
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.code === "Space") {
+        e.preventDefault(); // prevent default spacebar behavior (scroll, button click)
+      }
+
+      if (e.code === "Space" && !holding && !running) {
+        holding = true;
+        holdStart = Date.now();
+
+        setTimeout(() => {
+          if (holding && !running) {
+            readyToStart = true;
+            timerEl.classList.add("ready");
+          }
+        }, HOLD_THRESHOLD);
+      }
+
+      if (e.code === "Space" && running) {
+        stopTimer();
+      }
+    });
+
+    document.addEventListener("keyup", (e) => {
+      if (e.code === "Space" && holding && readyToStart && !running) {
+        holding = false;
+        readyToStart = false;
+        startTimer();
+      } else if (e.code === "Space") {
+        holding = false;
+        readyToStart = false;
+        timerEl.classList.remove("ready");
+      }
+    });
+
+    generateScramble();
+  </script>
+</body>
+</html>
